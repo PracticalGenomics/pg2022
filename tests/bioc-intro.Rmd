@@ -1,0 +1,195 @@
+---
+title: "bioc-intro"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+- Based on https://carpentries-incubator.github.io/bioc-intro/
+
+# Starting with data
+
+```{r}
+library( "tidyverse" )
+```
+
+```{r}
+dir.create( "data" )
+```
+
+```{r}
+download.file(url = "https://github.com/Bioconductor/bioconductor-teaching/raw/master/data/GSE96870/rnaseq.csv",
+              destfile = "data/rnaseq.csv")
+```
+
+# Manipulating and analysing data with dplyr
+
+```{r}
+rna <- read_csv("data/rnaseq.csv")
+rna %>%
+  filter(sex == "Male") %>%
+  select(gene, sample, tissue, expression)
+rna %>%
+  group_by(gene, infection, time) %>%
+  summarise(mean_expression = mean(expression),
+            median_expression = median(expression))
+```
+
+```{r}
+rna_exp <- rna %>%
+  select(gene, sample, expression)
+rna_wide <- rna_exp %>%
+  pivot_wider(names_from = sample,
+              values_from = expression)
+rna_wide
+rna_long <- rna_wide %>%
+    pivot_longer(names_to = "sample",
+                 values_to = "expression",
+                 -gene)
+rna_long
+```
+
+```{r}
+rna_mini <- rna %>%
+   select(gene, sample, expression) %>%
+   head(10)
+download.file(url = "https://raw.githubusercontent.com/carpentries-incubator/bioc-intro/main/_episodes_rmd/data/annot1.csv",
+              destfile = "data/annot1.csv")
+annot1 <- read_csv(file = "data/annot1.csv")
+full_join(rna_mini, annot1)
+download.file(url = "https://raw.githubusercontent.com/carpentries-incubator/bioc-intro/main/_episodes_rmd/data/annot2.csv",
+              destfile = "data/annot2.csv")
+
+annot2 <- read_csv(file = "data/annot2.csv")
+full_join(rna_mini, annot2, by = c("gene" = "external_gene_name"))
+```
+
+# Data visualization
+
+```{r}
+rna <- rna %>%
+  mutate(expression_log = log2(expression + 1))
+ggplot(rna, aes(x = expression_log)) + geom_histogram()
+```
+
+```{r fig.width=10}
+ggplot(data = rna,
+         mapping = aes(y = expression_log, x = sample)) +
+  geom_jitter(alpha = 0.2, color = "tomato") +
+  geom_boxplot(alpha = 0) +
+  theme(axis.text.x = element_text(angle = 90,  hjust = 0.5, vjust = 0.5))
+```
+
+```{r}
+rna_fc <- rna %>% select(gene, time,
+                         gene_biotype, expression_log) %>%
+  group_by(gene, time, gene_biotype) %>%
+  summarize(mean_exp = mean(expression_log)) %>%
+  pivot_wider(names_from = time,
+              values_from = mean_exp) %>%
+  mutate(time_8_vs_0 = `8` - `0`, time_4_vs_0 = `4` - `0`)
+ggplot(data = rna_fc, mapping = aes(x = time_4_vs_0, y = time_8_vs_0,
+                                color = gene_biotype)) +
+  geom_jitter(alpha = 0.3) +
+  geom_abline(intercept = 0)
+```
+
+```{r fig.width=10}
+rna_fc <- rna_fc %>% arrange(desc(time_8_vs_0))
+
+genes_selected <- rna_fc$gene[1:10]
+
+sub_rna <- rna %>%
+    filter(gene %in% genes_selected)
+
+mean_exp_by_time_sex <- sub_rna %>%
+  group_by(gene, time, sex) %>%
+    summarize(mean_exp = mean(expression_log))
+
+ggplot(data = mean_exp_by_time_sex,
+       mapping = aes(x = time, y = mean_exp, color = sex)) +
+  geom_line() +
+  facet_wrap(~ gene, scales = "free_y") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(title = "Mean gene expression by duration of the infection",
+       x = "Duration of the infection (in days)",
+       y = "Mean gene expression")  +
+  theme(text = element_text(size = 16),
+        axis.text.x = element_text(colour = "royalblue4", size = 12),
+        axis.text.y = element_text(colour = "royalblue4", size = 12),
+        panel.grid = element_line(colour="lightsteelblue1"),
+        legend.position = "top")
+```
+
+```{r fig.width=10}
+rna$chromosome_name <- factor(rna$chromosome_name,
+                               levels = c(1:19,"X","Y"))
+
+count_gene_chromosome <- rna %>% select(chromosome_name, gene) %>%
+  distinct() %>% ggplot() +
+  geom_bar(aes(x = chromosome_name), fill = "seagreen",
+           position = "dodge", stat = "count") +
+  labs(y = "log10(n genes)", x = "chromosome") +
+  scale_y_log10()
+
+exp_boxplot_sex <- ggplot(rna, aes(y=expression_log, x = as.factor(time),
+                 color=sex)) +
+   geom_boxplot(alpha = 0) +
+  labs(y = "Mean gene exp",
+       x = "time") + theme(legend.position = "none")
+
+library("patchwork")
+count_gene_chromosome +
+ (count_gene_chromosome + exp_boxplot_sex) +
+ exp_boxplot_sex +
+ plot_layout(ncol = 1)
+```
+
+```{r fig.width=10}
+par(mfrow = c(2, 2))
+boxplot(rnorm(100),
+        main = "Boxplot of rnorm(100)")
+boxplot(matrix(rnorm(100), ncol = 10),
+        main = "Boxplot of matrix(rnorm(100), ncol = 10)")
+hist(rnorm(100))
+hist(matrix(rnorm(100), ncol = 10))
+```
+
+# Next steps
+
+```{r}
+download.file( "https://raw.githubusercontent.com/carpentries-incubator/bioc-intro/main/_episodes_rmd/data/count_matrix.csv",  destfile="data/count_matrix.csv" )
+count_matrix <- read.csv("data/count_matrix.csv", row.names = 1) %>% as.matrix()
+download.file( "https://raw.githubusercontent.com/carpentries-incubator/bioc-intro/main/_episodes_rmd/data/sample_metadata.csv",  destfile="data/sample_metadata.csv" )
+sample_metadata <- read.csv("data/sample_metadata.csv")
+download.file( "https://raw.githubusercontent.com/carpentries-incubator/bioc-intro/main/_episodes_rmd/data/gene_metadata.csv",  destfile="data/gene_metadata.csv" )
+gene_metadata <- read.csv("data/gene_metadata.csv")
+```
+
+```{r}
+library("SummarizedExperiment")
+se <- SummarizedExperiment(assays = list(counts = count_matrix),
+                           colData = sample_metadata,
+                           rowData = gene_metadata)
+se
+```
+
+```{r}
+library("tidySummarizedExperiment")
+se
+```
+
+```{r}
+se %>%
+    ggplot(aes(counts + 1, group=.sample, color=infection)) +
+    geom_density() +
+    scale_x_log10() +
+    theme_bw()
+```
+
+```{r}
+sessionInfo()
+```
+
