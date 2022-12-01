@@ -1,0 +1,100 @@
+---
+title: "day3-03-markers"
+author: "Eddie Imada"
+date: "2022-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the packages
+```{r, include=FALSE}
+library(scran)
+library(scater)
+```
+
+
+## Load the dataset
+
+We are using the PBMC4k dataset in this example.
+
+```{r}
+sce.pbmc <- readRDS("~/workspace/practical_genomics/sce.pbmc.rds")
+```
+
+## Performing comparisons across clusters
+The function `scoreMarkers()` performs pairwise comparisons between clusters
+and returns a list of dataframes containing several metrics for each cluster.
+It requires as input a `singleCellExperiment` object and a vector with the
+labels for each cell.
+
+```{r}
+
+```
+
+Let's check the metrics that are available.
+
+```{r}
+```
+
+Let's see how this data frame looks like for the cluster 1.
+```{r}
+```
+
+## Let's explore the clusters
+
+First lets select the cluster 1.
+```{r}
+```
+Now let's sort it by the metric of choice (mean AUC) and check the top genes.
+```{r}
+```
+
+## Looking at expression profiles of the top markers
+
+We can use the `plotExpression()` function and pass the names of the top markers
+to check their expression profiles across the clusters.
+
+```{r}
+plotExpression(sce.pbmc, features=head(rownames(ordered)), 
+               x="label", colour_by="label")
+```
+
+## Exploring other ways to summarize the metrics
+
+Each metric and summarizing approach has pros and cons that should be considered
+during our analysis. There isn't the BEST metric, since it dependend on our
+goals. 
+
+Let's see what, if anything, changes when we sort by the `min.AUC` instead of `mean.AUC`.
+
+```{r}
+ordered <- chosen[order(, decreasing=TRUE),]
+head(ordered[,1:4]) # showing basic stats only, for brevity.
+plotExpression(sce.pbmc, features=head(rownames(ordered)), 
+               x="label", colour_by="label")
+```
+It seems most of the top genes are the same. However, the gene SPON2 is new in 
+our top 6 list. Why?
+
+## Exploring other metrics
+
+Let's see which markers do we get when sorting by the logFC metric.
+
+```{r}
+ordered <- chosen[order(, decreasing=TRUE),]
+head(ordered[,1:4]) # showing basic stats only, for brevity.
+```
+
+That's a completely different list! Let's check how their expression profiles
+looks like.
+
+```{r}
+plotExpression(sce.pbmc, features=head(rownames(ordered)), 
+               x="label", colour_by="label")
+```
+
+The difference is quite striking! Let's practice more!
+
