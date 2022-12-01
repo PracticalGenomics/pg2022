@@ -1,0 +1,139 @@
+---
+title : "PG2022 Clustering Demo"
+author: "Frederick J Tan"
+date  : "12 December 2022"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+# Load packages
+
+```{r}
+# Load scran, scater for basic clustering
+library( "scran" )
+library( "" )
+# Load bluster, pheatmap to explore clustering strategies
+
+
+```
+
+# Load data
+
+```{r}
+sce.pbmc <- readRDS( "/home/idies/workspace/practical_genomics/sce.pbmc.rds" )
+```
+
+```{r}
+# Check that everything loaded
+
+```
+
+# Cluster
+
+```{r}
+# Save clusterCells() output in nn.clusters object
+clusterCells()
+```
+
+```{r}
+# Store cluster labels as metadata
+colLabels()
+```
+
+```{r}
+# plotTSNE() with colour_by="label" and text_by
+plotTSNE()
+```
+
+```{r}
+# plotTSNE() of MS4A1 (B cells), CD14 (macrophages), CD8A (CD8+ T cells)
+
+
+
+```
+
+# Explore clusterCells output
+
+```{r}
+# What class is the nn.clusters object?
+
+```
+
+```{r}
+# What is the length of nn.clusters?
+
+```
+
+```{r}
+# Create a table showing how many cells are in each cluster
+
+```
+
+```{r}
+# Plot expression of marker genes
+goi <- c( "MS4A1", "CD14", "CD8A" )
+plotExpression()
+```
+
+# Adjust clustering strategy
+
+```{r}
+# Create nn.clusters2 object based on SNNGraphParam( k=50 )
+
+
+
+
+```
+
+```{r}
+# How many cells are in each cluster?
+
+```
+
+```{r}
+# Store cluster labels as metadata
+colData(sce.pbmc)$label2 <- nn.clusters2
+```
+
+```{r}
+# Check that metadata added
+
+```
+
+# Compare two clustering strategies
+
+```{r}
+# plotTSNE of label and label2
+
+
+```
+
+```{r}
+# Tabulate how cells from first clustering strategy overlap with second
+tab <- table(
+  paste( "A", nn.clusters ),
+  paste( "B", nn.clusters2 )
+)
+```
+
+```{r}
+# Print out actual table
+
+```
+
+```{r}
+# Visualize by pheatmap
+pheatmap( log10( tab+10 ) )
+```
+
+# Document software
+
+- Quit the current R session
+- Run All
+
+```{r}
+sessionInfo()
+```
+
