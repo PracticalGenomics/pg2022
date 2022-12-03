@@ -1,0 +1,250 @@
+---
+title: "day3-04-annotation"
+author: "Eddie Imada"
+date: "2022-12-01"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 80
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the packages
+
+```{r, include=FALSE}
+library(scran)
+library(scater)
+library(pheatmap)
+```
+
+## Load the dataset
+
+We are using the PBMC4k dataset in this example.
+
+```{r}
+sce.pbmc <- readRDS("~/workspace/practical_genomics/sce.pbmc.rds")
+```
+
+## Annotation based on reference data
+
+Cell annotation can be performed by comparing each cell expression profile to a
+set of profiles known to represent a given cell type. That requires that we have
+a collection of expression profiles to compare to. Thankfully, several
+consortiums have already tackle this issue such as the BluePrint(1) and 
+ENCODE(2). These collections (and others) have been conviniently put together in the 
+`celldex` package.
+
+
+To access the BluePrint and ENCODE expression profile we can use the function
+`BlueprintEncodeData()`. Let's load this data.
+
+```{r}
+library(celldex)
+ref <- BlueprintEncodeData()
+ref
+```
+
+This give us a `SummarizedExperiment` object. Let's check which cell types we
+have.
+
+```{r}
+colData(ref)
+```
+
+Now that we have a reference we can compare to our single cell dataset. For this
+we can use the package `SingleR`. The `SingleR()` function compares a dataset
+to a reference and assign the best label of the reference. It returns a 
+data.frame with the results.
+
+```{r}
+library(SingleR)
+pred <- SingleR(test=sce.pbmc, ref=ref, labels=ref$label.main)
+```
+
+We can `table()` the labels assigned to obtain a summary of the annotation.
+
+```{r}
+table(pred$labels)
+```
+
+We can visualize the results of the annotation to check if the annotations were
+robust with the function `plotScoreHeatmap()`
+
+```{r}
+plotScoreHeatmap(pred)
+```
+
+We can also compare the results of our annotation with the labels from the 
+unsupervised clustering.
+
+```{r}
+tab <- table(Assigned=pred$labels, Cluster=colLabels(sce.pbmc))
+# Adding a pseudo-count of 10 to avoid strong color jumps with just 1 cell.
+pheatmap(log2(tab+10), color=colorRampPalette(c("white", "blue"))(101))
+```
+
+## Annotation based on gene sets
+
+Sometimes we might not have expression profiles to compare to, but we might know
+which markers are commonly found expressed in a given cell type. Some resources
+like the Molecular Signature Database (MSigDB) has collections of such markers,
+also known as gene sets. We can use these gene sets to check if our cells
+expresses these markers at a higher level than other markers/genes.
+This does not require matching of individual cells to the expression values of the reference dataset, which is faster and more convenient when only the identities of the markers are available.
+
+The package `AUCell` ranks the genes by their expression levels and check if
+they are consistenly found in the upper bound of the expression range (high
+ranks). Let's try this approach using a brain scRNAseq dataset from Tasic et al.
+
+First, let's load the package and the dataset.
+```{r}
+library(AUCell)
+sce.tasic <- readRDS("~/workspace/practical_genomics/day3/sce.tasic.rds")
+```
+
+We can use the function `AUCell_buildRankings()` to create a ranking of the
+genes by expression level, which is used to calculate the AUC. This function
+requires a `matrix-class` object. NOTE: SCE objects stores the count matrix
+in a `dgCmatrix-class` (also known as sparse matrix), so we need to explicitely
+convert it to a `matrix`
+
+```{r}
+tasic.mat <- counts(sce.tasic)
+rownames(tasic.mat) <- rownames(sce.tasic)
+tasic.rankings <- AUCell_buildRankings(as.matrix(tasic.mat),
+                                        plotStats=FALSE, verbose=FALSE)
+```
+
+Now that we have our rankings, we need a collection of gene sets. There are
+multiple sources for them. In this example we are going to use a gene set
+for brain cells derived from the Seizel et al data that has already been saved
+for our convenience.
+
+```{r}
+brain.gs <- readRDS("~/workspace/practical_genomics/day3/brainMarkers.rds")
+```
+
+Now we can apply the `AUCell_calcAUC()` function to check if any gene set is
+consistenly highly expressed in a given cell.
+
+```{r}
+brain.aucs <- AUCell_calcAUC(brain.gs, tasic.rankings)
+```
+
+We got a matrix containing the AUC for each gene set. Let's transpose the matrix
+to make it easier to manipulate and check the output.
+
+```{r}
+results <- t(assay(brain.aucs))
+head(results)
+```
+
+Let's assign the gene set with the highest AUC as the new cell label and compare
+with the original labels (`broad_type` column).
+
+```{r}
+new.labels <- colnames(results)[max.col(results)]
+tab <- table(new.labels, sce.tasic$broad_type)
+tab
+```
+
+Looks good! Most of the new labels match to similar labels from the original
+data.
+
+As a diagnostic measure we can evaluate the AUC distribution for the gene sets
+with the function `AUCell_exploreThresholds()`.
+
+```{r}
+AUCell_exploreThresholds(brain.aucs["interneurons",], plotHist=TRUE, assign=TRUE) 
+```
+
+## Annotation based on markers
+
+In the previous section we used the `scoreMarkers()` to obtain a list of markers
+for each cluster. However, interpreting a list of genes is often hard and 
+requires great prior knowledge of the system being studied. When we have a list
+of markers, one possible way to obtain a higher level view of the biology is to
+check whether our markers are enriched for some biological function.
+
+In this example we are going to use the function `goanna()` from the `limma`
+package, which can perform hypergeometric tests to check whether a particular
+term of the Gene Ontology (GO) occurs more often than expected by chance.
+
+Let's practice on a scRNAseq dataset containing mammary cells from mice.
+
+```{r}
+sce.mam <- readRDS("~/workspace/practical_genomics/day3/sce.mam.rds")
+```
+
+We can use the `scoreMarkers()` function to obtain a list of markers for each
+cluster.
+
+```{r}
+markers.mam <- scoreMarkers(sce.mam, lfc=1)
+```
+
+Let's check if the cluster 2 is enriched in any GO. For that we first sort our
+markers by Cohen's d and select the names of the top 100 genes and all genes
+names, which is our universe for the hypergeometric test.
+
+```{r}
+markers.2 <- markers.mam[["2"]]
+all.gns <- rownames(markers.2)
+is.top <- order(markers.2$median.logFC.cohen, decreasing=TRUE)[1:100]
+top.gns <- rownames(markers.2[is.top,])
+```
+
+Before we perform the testing, we need to perform some IDs conversion since
+the `goanna()` function requires Entrez IDs. The package `org.Mm.eg.db` contains
+a database of IDs for the mouse genome, which can be queried with the function
+`mapIds()`
+
+```{r}
+library(org.Mm.eg.db)
+entrez.top <- mapIds(org.Mm.eg.db, keys=top.gns, 
+    column="ENTREZID", keytype="SYMBOL")
+entrez.all <- mapIds(org.Mm.eg.db, keys=all.gns, 
+                     column="ENTREZID", keytype="SYMBOL")
+```
+
+Now that we converted our IDs to Entrez IDs we can test for enrichment.
+
+```{r}
+library(limma)
+go.out <- goana(unique(entrez.top), species="Mm", 
+    universe=unique(entrez.all))
+```
+
+Let's peek the results.
+
+```{r}
+head(go.out)
+```
+
+GO terms are classified into 3 major categories: Cellular Component (CC),
+Biological Process (BP), and Molecular Function (MF). Often BP are easier to 
+interpret so that's what we are going to use. Moreover, many GO's terms are 
+nested inside other GO's terms which can lead to very generic terms that are
+often not useful for interpreting the results i.e. "metabolic function". A 
+general strategy to avoid generic terms is to restrict the terms by their size.
+
+Bellow we are sorting the terms by significance and selecting only BP terms (`Ont` column) with
+200 genes or less.
+
+```{r}
+go.out <- go.out[order(go.out$P.DE),]
+go.useful <- go.out[go.out$Ont=="BP" & go.out$N <= 200,]
+head(go.useful[,c(1,3,4)], 40)
+```
+
+Seems like we have a lot of lipid metabolism and tube development! Any guesses
+on the cell types represented in this cluster?
+
+Let's practice more!
+
+## References
+(1) Martens, J. H., and H. G. Stunnenberg. 2013. “BLUEPRINT: mapping human blood cell epigenomes.” Haematologica 98 (10): 1487–9.
+(2) The ENCODE Project Consortium. 2012. “An integrated encyclopedia of DNA elements in the human genome.” Nature 489 (7414): 57–74.
