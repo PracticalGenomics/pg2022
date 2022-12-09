@@ -1,0 +1,207 @@
+---
+title: "day4-01-trajectory"
+author: "Doron Betel & Eddie Imada"
+date: "2022-12-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading the libraries
+
+```{r}
+library(scater)
+library(scran)
+library(ggplot2)
+```
+
+
+# Load the Nestorowa et al dataset
+
+```{r}
+sce.nest <- readRDS("~/workspace/practical_genomics/day4/sce.nest.rds")
+```
+
+# Cluster based minimum spanning trees
+
+The first step is to obtain the centroids for each cluster:
+```{r}
+by.cluster <- aggregateAcrossCells()
+centroids <- reducedDim()
+```
+
+Now we compute the minimum spanning tree (MST) with TSCAN. The MST is simply an 
+undirected acyclic graph that passes through each centroid exactly once and is 
+thus the most parsimonious structure that captures the transitions between 
+clusters. 
+
+There are multiple ways to create the MST with TSCAN. In this example we are
+starting with the centroids coordinates in a reduce dimension (PCA). We can
+use the function `createClusterMST()` to create the MST.
+
+```{r}
+library(TSCAN)
+# We set cluster=NULL since we already aggregate the by cluster in the code above
+mst <- createClusterMST()
+mst
+```
+
+Next, use the function `reportEdges()` to obtain the coordinates for the start
+and end of of every edge (line conecting two vertices) in the MST. We can
+obtain these coordinates in spaces different from what was used to create the
+MST. Here we want to visualize with TSNE and the MST was created in PCA space.
+
+```{r}
+line.data <- reportEdges(,, clusters=NULL, use.dimred="TSNE")
+line.data
+```
+
+Now we can plot our data in the TSNE space and add the lines we just obtained.
+For that we can use `geom_line()`from ggplot2.
+
+```{r}
+p <- plotTSNE(sce.nest, colour_by="label") + 
+  geom_line(data=, mapping=aes(x=dim1, y=dim2, group=edge))
+print(p)
+```
+
+Now that we have the paths, we can compute the pseudotime for each cell.
+For that first we use the function `mapCellToEdges()` to map each cell to the
+nearest position on an edge.
+
+```{r}
+map.tscan <- mapCellsToEdges()
+```
+
+Next, we can compute the distance from the positions obtained above to the root
+(the point in which the pseudotime is relative to). In this case we will choose
+a random root for demonstration purposes. However, it is often more meaningful
+to choose a root based on biology (i.e. a more undiferentiated/early state).
+
+```{r}
+tscan.pseudo <- orderCells()
+head(tscan.pseudo)
+```
+
+We can see we have 2 columns in our `tscan.pseudo` object. Each column reports
+the pseudotime orderings from the root to each terminal node. Since we have a
+branch in this example we have 2 terminal nodes (apart from the root).
+
+Now we can compute the pseudotime with the `averagePseudotime()` function.
+
+```{r}
+common.pseudo <- averagePseudotime() 
+```
+
+Let's visualize our data and color the cells by their pseudotime.
+
+```{r}
+p <- plotTSNE(sce.nest, colour_by=I(), 
+              text_by="label", text_colour="red") +
+  geom_line(data=, mapping=aes(x=dim1, y=dim2, group=edge))
+print(p)
+```
+
+# Principal curves
+
+Another approach to computing pseudotime is using principal curves. Principal
+curve is effectively a non-linear generalization of PCA, where the curve is
+allowed to bend. 
+
+To exercute that we can use the `slingshot` package and `slingshot()` function
+fit a principal curve and compute the pseudotime similarly to the previous
+approach (projecting into the curve and copmuting the distance to the root).
+
+```{r}
+library(slingshot)
+sce.sling <- slingshot()
+head(sce.sling$slingPseudotime_1)
+```
+
+We now have the pseudotimes for each cell. To visualize our data, we can
+use the function `embedCurves()` to obtain the path the curve is taking in
+any coordinate space we choose (TSNE in this example). Next, we can extract the
+coordinates in this space with the `slingCurves()` function.
+
+```{r}
+embedded <- embedCurves()
+embedded <- slingCurves() # only 1 path.
+```
+
+Now we extract the coordinates in the space (in the `s` slot) and sort by the
+order (in the `ord` slot).
+
+```{r}
+embedded <- data.frame(embedded$s[embedded$ord,])
+```
+
+Now we can plot the data and the curve with `geom_path()`. NOTE: We cannot use
+`geom_line()` here since the principal curve is not linear.
+
+```{r}
+p <- plotTSNE(sce.sling, colour_by=) +
+  geom_path(data=, aes(x=Dim.1, y=Dim.2), size=1.2)
+
+print(p)
+```
+
+In this example we assumed that all cells are part of a single curve (no branch)
+However, from our MST analysis we have data that suggests branching. We can
+tweak `slingshot()` parameters to build a MST and use it to define the number
+of "lineages". Each path from the root to a terminal node is considered one 
+lineage. We can build a MST by passing the clusters ID to the `cluster`
+parameter.
+
+Moreover, by default `slingshot()` will compute one point of the curve per cell,
+which can quickly become computationally demanding with a high number of cells.
+We can reduce this load by requesting that slingshot approximate these points
+by N cells with the parameter `approx_points`.
+
+```{r}
+sce.sling4 <- slingshot(sce.nest, cluster=colLabels(sce.nest), 
+                        reducedDim='PCA', approx_points=100, omega=TRUE)
+pseudo.paths <- slingPseudotime()
+head(pseudo.paths)
+```
+
+We can see we have 3 lineages in our example, however, we can see that some
+cells are shared across lineages, but each has a different pseudotime depending
+on the lineage. To obtain a single pseudotime, we can summarize the data.
+In this case we will average the pseudotimes.
+
+```{r}
+shared.pseudo <- rowMeans()
+```
+
+Now let's plot the data with pseudotime. First we obtain the curve coordinates.
+
+```{r}
+embedded <- embedCurves(, "UMAP")
+embedded <- slingCurves(embedded)
+length(embedded)
+```
+
+In this case we have 3 curves, so we need to extract the coordinates for each
+curve.
+
+```{r}
+line1 <- embedded[[1]]
+line1 <- data.frame(line1$s[line1$ord,])
+line2 <- embedded[[2]]
+line2 <- data.frame(line2$s[line2$ord,])
+line3 <- embedded[[3]]
+line3 <- data.frame(line3$s[line3$ord,])
+```
+
+Now we can plot our data.
+
+```{r}
+gg <- plotUMAP(sce.sling4, colour_by=I())
+
+print(gg)
+```
+
+
+
