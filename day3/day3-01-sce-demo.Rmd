@@ -1,0 +1,116 @@
+---
+title : "PG2022 SingleCellExperiment Demo"
+author: "Frederick J Tan"
+date  : "12 December 2022"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+![](http://bioconductor.org/books/release/OSCA.intro/images/SingleCellExperiment.png)
+
+# Load packages
+
+```{r messages=FALSE}
+# Load SingleCellExperiment, scater for exploratory data analysis
+library( "SingleCellExperiment" )
+library( "" )
+```
+
+# Load data
+
+- "4k PBMCs from a Healthy Donor" dataset available at https://www.10xgenomics.com/resources/datasets/4-k-pbm-cs-from-a-healthy-donor-2-standard-2-1-0
+- Pre-processing described at http://bioconductor.org/books/release/OSCA.workflows/unfiltered-human-pbmcs-10x-genomics.html
+
+```{r}
+# Load from /home/idies/workspace/practical_genomics/sce.pbmc.rds
+sce.pbmc <- readRDS( "" )
+```
+
+```{r}
+# Check what was loaded into sce.pbmc
+
+```
+
+# Explore primary data
+
+```{r}
+# Print only first fifteen genes, first ten cells
+assay( sce.pbmc )
+```
+
+# Explore cell metadata
+
+```{r}
+# Print cell metadata
+colData()
+```
+
+```{r}
+# Tabulate the number of cells in each cluster label
+colData(sce.pbmc)$label
+```
+
+# Explore dimension reductions
+
+```{r}
+# Get list of available dimension reductions
+reducedDims()
+```
+
+```{r}
+# plotTSNE() with colour_by="label" and text_by
+plotTSNE()
+```
+
+# Explore feature metadata
+
+```{r}
+# Print feature metadata
+rowData()
+```
+
+```{r}
+# plotTSNE() of MS4A1 (B cells), CD14 (macrophages), CD8A (CD8+ T cells)
+plotTSNE( sce.pbmc, colour_by="" )
+plotTSNE()
+plotTSNE()
+```
+
+```{r}
+# plotExpression() of MS4A1, CD14, CD8A
+goi <- c( "MS4A1", "CD14", "" )
+plotExpression( sce.pbmc, features=goi, x="label" )
+```
+
+# Subset cluster 3
+
+```{r}
+# Create a TRUE/FALSE vector of length ncol(sce.pbmc)
+coi <- colData(sce.pbmc)$label == 
+table( coi )
+```
+
+```{r}
+# Extract only 541 cells from cluster 3 
+sce.pbmc.c3 <- sce.pbmc[,]
+table( colData(sce.pbmc.c3)$label )
+```
+
+```{r}
+# Compare before (sce.pbmc) and after (sce.pbmc.c3)
+goi <- c( "MS4A1", "CD14", "CD8A" )
+plotExpression()
+plotExpression()
+```
+
+# Document software
+
+- Quit the current R session
+- Run All
+
+```{r}
+sessionInfo()
+```
+
