@@ -1,0 +1,76 @@
+---
+title : "PG2022 SingleCellExperiment from HTAN Seurat .rds"
+author: "Frederick J Tan"
+date  : "12 December 2022"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+- "SCLC epithelial cells" dataset available at https://cellxgene.cziscience.com/collections/62e8f058-9c37-48bc-9200-e767f318a8ec
+- Study by Chan et al 2021 Cancer Cell http://pubmed.gov/34653364
+
+# Load packages
+
+```{r}
+library( "Seurat" )
+library( "scater" )
+```
+
+# Load data
+
+```{r}
+# Load HTAN Seurat .rds
+htan.sclc.seurat <- readRDS( "/home/idies/workspace/practical_genomics/data/htan-msk-sclc.rds" )
+```
+
+```{r}
+# Convert from Seurat to SingleCellExperiment
+htan.sclc <- as.SingleCellExperiment( htan.sclc.seurat )
+```
+
+# Visualize major subtypes
+
+```{r}
+plotUMAP( htan.sclc, colour_by="SCLC_major_subtype_of_sample" )
+```
+
+# Visualize known marker genes
+
+- ASCL1 is ENSG00000139352
+- NEUROD1 is ENSG00000162992
+- POU2F3 is ENSG00000137709
+
+```{r}
+plotUMAP( htan.sclc, colour_by="ENSG00000139352" )
+plotUMAP( htan.sclc, colour_by="ENSG00000162992" )
+plotUMAP( htan.sclc, colour_by="ENSG00000137709" )
+```
+
+# Subset PLCG2-high subpopulation
+
+```{r}
+coi <- colData(htan.sclc)$recurrent_cluster == "True"
+table( coi )
+```
+
+```{r}
+htan.sclc.sub <- htan.sclc[,coi]
+htan.sclc.sub
+```
+
+```{r}
+plotUMAP( htan.sclc.sub, colour_by="SCLC_major_subtype_of_sample" )
+```
+
+```{r}
+table( colData(htan.sclc.sub)$SCLC_major_subtype_of_sample )
+```
+
+# Document software
+
+```{r}
+sessionInfo()
+```
+

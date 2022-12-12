@@ -1,0 +1,119 @@
+---
+title : "PG2022 SingleCellExperiment from Raw 10x Genomics Data"
+author: "Frederick J Tan"
+date  : "12 December 2022"
+output: 
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+- "4k PBMCs from a Healthy Donor" dataset available at https://www.10xgenomics.com/resources/datasets/4-k-pbm-cs-from-a-healthy-donor-2-standard-2-1-0
+- Pre-processing based on http://bioconductor.org/books/release/OSCA.workflows/unfiltered-human-pbmcs-10x-genomics.html
+
+# Load packages
+
+```{r}
+library(DropletUtils)
+library(scater)
+library(EnsDb.Hsapiens.v86)
+library(scran)
+```
+
+# Load data
+
+```{r}
+fname <- "/home/idies/workspace/practical_genomics/data/pbmc4k/raw_gene_bc_matrices/GRCh38/"
+sce.pbmc <- read10xCounts(fname, col.names=TRUE)
+```
+
+# Annotate genes
+
+```{r}
+rownames(sce.pbmc) <- uniquifyFeatureNames(
+    rowData(sce.pbmc)$ID, rowData(sce.pbmc)$Symbol)
+```
+
+```{r}
+location <- mapIds(EnsDb.Hsapiens.v86, keys=rowData(sce.pbmc)$ID, 
+    column="SEQNAME", keytype="GENEID")
+```
+
+# Chapter 7. Droplet processing
+
+- http://bioconductor.org/books/release/OSCA.advanced/droplet-processing.html
+
+```{r}
+set.seed(100)
+e.out <- emptyDrops(counts(sce.pbmc))
+sce.pbmc <- sce.pbmc[,which(e.out$FDR <= 0.001)]
+```
+
+# Chapter 1. Quality control
+
+- http://bioconductor.org/books/release/OSCA.basic/quality-control.html
+
+```{r}
+stats <- perCellQCMetrics(sce.pbmc, subsets=list(Mito=which(location=="MT")))
+high.mito <- isOutlier(stats$subsets_Mito_percent, type="higher")
+sce.pbmc <- sce.pbmc[,!high.mito]
+```
+
+# Chapter 2. Normalization
+
+- http://bioconductor.org/books/release/OSCA.basic/normalization.html
+
+```{r}
+set.seed(1000)
+clusters <- quickCluster(sce.pbmc)
+sce.pbmc <- computeSumFactors(sce.pbmc, cluster=clusters)
+sce.pbmc <- logNormCounts(sce.pbmc)
+```
+
+# Chapter 3. Feature selection
+
+- http://bioconductor.org/books/release/OSCA.basic/feature-selection.html
+
+```{r}
+set.seed(1001)
+dec.pbmc <- modelGeneVarByPoisson(sce.pbmc)
+top.pbmc <- getTopHVGs(dec.pbmc, prop=0.1)
+```
+
+# Chapter 4. Dimensionality reduction
+
+- http://bioconductor.org/books/release/OSCA.basic/dimensionality-reduction.html
+
+```{r}
+set.seed(10000)
+sce.pbmc <- denoisePCA(sce.pbmc, subset.row=top.pbmc, technical=dec.pbmc)
+
+set.seed(100000)
+sce.pbmc <- runTSNE(sce.pbmc, dimred="PCA")
+
+set.seed(1000000)
+sce.pbmc <- runUMAP(sce.pbmc, dimred="PCA")
+```
+
+# Chapter 5. Clustering
+
+- http://bioconductor.org/books/release/OSCA.basic/clustering.html
+
+```{r}
+g <- buildSNNGraph(sce.pbmc, k=10, use.dimred = 'PCA')
+clust <- igraph::cluster_walktrap(g)$membership
+colLabels(sce.pbmc) <- factor(clust)
+```
+
+# Visualize results
+
+```{r}
+plotTSNE( sce.pbmc, colour_by="label", text_by="label" )
+```
+
+# Document software
+
+```{r}
+sessionInfo()
+```
+
