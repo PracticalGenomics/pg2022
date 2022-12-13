@@ -1,0 +1,121 @@
+---
+title: "RNA Velocity"
+author: "Doron Betel & Eddie Imada"
+date: "2022-12-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#load libraries
+```{r}
+library(scater)
+library(scuttle)
+library(scran)
+library(ggplot2)
+```
+
+# Loading the data
+```{r}
+sce.sperm <- readRDS("~/workspace/practical_genomics/day4/sce.sperm.rds")
+```
+
+Let's take a peek at the data.
+
+```{r}
+sce.sperm
+```
+
+Let's visualize the data and how it's clustered.
+```{r}
+plotTSNE()
+```
+
+
+Note that in this dataset we have 3 assays: spliced, unspliced, and logcounts.
+To execute a RNA velocity analysis we need information on the ratio between
+spliced/unspliced transcripts. RNA velocity can be computed with the package
+velociraptor (scVelo).
+
+`velociraptor` is an R wrapper for the python package `scVelo`. The 
+`velociraptor()` function accepts a SingleCellExperiment object
+and returns a similar object decorated with the velocity statistics.
+
+First, we want to obtain a list of the high variable genes since velocity
+is based on transcriptional rate changes across cells.
+
+```{r}
+dec <- modelGeneVarByPoisson( , assay.type="spliced")
+hvgs <- getTopHVGs( , n=2500)
+```
+
+We can run `scvelo()` now passing the HVGs.
+
+```{r}
+library(velociraptor)
+velo.out <- scvelo(, assay.X="spliced", 
+                   subset.row= , use.dimred="PCA")
+velo.out
+```
+
+This yields a `SingleCellExperiment` class object with details of the velocity
+analysis. The primary output is the matrix of velocity vectors that describe 
+the direction and magnitude of transcriptional change for each cell. 
+We can extract the cells ordering/pseudotime from the `colData` column named 
+`velocity_pseudotime`. We can assign this variable back to our original SCE
+object.
+
+```{r}
+sce.sperm$pseudotime <- 
+```
+
+Now we can visualize our results.
+
+```{r}
+
+```
+
+Similarly to the trajectory analysis, we can create embeddings to visualize 
+the velocity vectors.
+
+```{r}
+redim <- reducedDim(sce.sperm, "TSNE")
+embedded <- embedVelocity(redim, velo.out)
+grid.df <- gridVectors(reducedDim(sce.sperm, "TSNE"), embedded, resolution=30)
+```
+
+We can replot with velocity vectors.
+
+```{r}
+plotTSNE() +
+  geom_segment(data= , 
+               mapping=aes(x=start.1, y=start.2, xend=end.1, yend=end.2), 
+               arrow=arrow(length=unit(0.05, "inches"), type="closed"))
+```
+
+Although the velocity pseudotimes might be used directly in our downstream 
+analyses, it is usually desirable to combine this data with additional 
+trajectory analyses. This is due to the fact that velocity computations are 
+performed per cell, yet interpretation is often performed at a lower granularity.
+
+For instance, we can create a MST an obtain the average velocity per cluster to
+identify which of the clusters is likely to be the root.
+
+```{r}
+library(TSCAN)
+mst <- TSCAN::createClusterMST(, outgroup=TRUE)
+
+by.cluster <- split(sce.sperm$pseudotime, colLabels(sce.sperm))
+mean.by.cluster <- sapply(by.cluster, mean)
+# make sure the objects are in the same order
+ord <- names(igraph::V(mst))
+mean.by.cluster <- mean.by.cluster[ord]
+color.by.cluster <- viridis::viridis(21)[cut(mean.by.cluster, 21)]
+
+set.seed(1001)
+plot(mst, vertex.color=color.by.cluster)
+
+```
+
+We can define the cluster with the "lowest" velocity as the root cluster.
